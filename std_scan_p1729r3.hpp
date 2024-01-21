@@ -197,13 +197,13 @@ namespace p1729r3 {
         constexpr explicit basic_scan_arg(signed char* v) noexcept                 : type_(_Scan_arg_type::_Signed_i8)     {value_._Signed_i8 = v;}
         constexpr explicit basic_scan_arg(signed short* v) noexcept                : type_(_Scan_arg_type::_Signed_i16)    {value_._Signed_i16 = v;}
         constexpr explicit basic_scan_arg(signed int* v) noexcept                  : type_(_Scan_arg_type::_Signed_i32)    {value_._Signed_i32 = v;}
-        constexpr explicit basic_scan_arg(signed long* v) noexcept                 : type_(_Scan_arg_type::_Signed_long)   {value_._Signed_i64 = v;}
-        constexpr explicit basic_scan_arg(signed long long* v) noexcept            : type_(_Scan_arg_type::_Signed_i64)    {value_._Signed_long = v;}
+        constexpr explicit basic_scan_arg(signed long* v) noexcept                 : type_(_Scan_arg_type::_Signed_long)   {value_._Signed_long = v;}
+        constexpr explicit basic_scan_arg(signed long long* v) noexcept            : type_(_Scan_arg_type::_Signed_i64)    {value_._Signed_i64 = v;}
         constexpr explicit basic_scan_arg(unsigned char* v) noexcept               : type_(_Scan_arg_type::_Unsigned_i8)   {value_._Unsigned_i8 = v;}
         constexpr explicit basic_scan_arg(unsigned short* v) noexcept              : type_(_Scan_arg_type::_Unsigned_i16)  {value_._Unsigned_i16 = v;}
         constexpr explicit basic_scan_arg(unsigned int* v) noexcept                : type_(_Scan_arg_type::_Unsigned_i32)  {value_._Unsigned_i32 = v;}
-        constexpr explicit basic_scan_arg(unsigned long* v) noexcept               : type_(_Scan_arg_type::_Unsigned_long) {value_._Unsigned_i64 = v;}
-        constexpr explicit basic_scan_arg(unsigned long long* v) noexcept          : type_(_Scan_arg_type::_Unsigned_i64)  {value_._Unsigned_long = v;}
+        constexpr explicit basic_scan_arg(unsigned long* v) noexcept               : type_(_Scan_arg_type::_Unsigned_long) {value_._Unsigned_long = v;}
+        constexpr explicit basic_scan_arg(unsigned long long* v) noexcept          : type_(_Scan_arg_type::_Unsigned_i64)  {value_._Unsigned_i64 = v;}
         constexpr explicit basic_scan_arg(float* v) noexcept                       : type_(_Scan_arg_type::_Float32)       {value_._Float32 = v;}
         constexpr explicit basic_scan_arg(double* v) noexcept                      : type_(_Scan_arg_type::_Float64)       {value_._Float64 = v;}
         constexpr explicit basic_scan_arg(long double* v) noexcept                 : type_(_Scan_arg_type::_Float_ext)     {value_._Float_ext = v;}
@@ -258,15 +258,15 @@ namespace p1729r3 {
 
     template <class Context>
     class basic_scan_args {
-        size_t                     size_;
-        basic_scan_arg<Context>*   data_; // Pointer to actual format store.
+        size_t                           size_;
+        const basic_scan_arg<Context>*   data_; // Pointer to actual format store.
     public:
-        basic_scan_args() noexcept;
+        basic_scan_args() noexcept = default;
         template <typename ... Args>
-        basic_scan_args(basic_scan_arg_store<Context, Args...>& store) noexcept :
+        basic_scan_args(const basic_scan_arg_store<Context, Args...>& store) noexcept :
         size_(sizeof ... (Args)), data_(&(store.data[0])) {}
 
-        basic_scan_arg<Context> get(size_t id) {
+        basic_scan_arg<Context> get(size_t id) const {
             if (id >= size_) {
                 throw STD out_of_range("scan arg index out of range!");
             }
@@ -284,9 +284,9 @@ namespace p1729r3 {
         template <typename Ty>
         using scanner_type     = scanner<Ty, CharT>;
 
-        constexpr basic_scan_context(Rng rg, basic_scan_args<basic_scan_context> args) :
+        constexpr basic_scan_context(Rng rg, basic_scan_args<basic_scan_context> args):
             current_(rg.begin()), end_(rg.end()), args_(args) {}
-        constexpr basic_scan_context(Rng rg, basic_scan_args<basic_scan_context> args, const STD locale& loc) :
+        constexpr basic_scan_context(Rng rg, basic_scan_args<basic_scan_context> args, const std::locale& loc) :
             current_(rg.begin()), end_(rg.end()), locale_(loc), args_(args) {}
 
         constexpr basic_scan_arg<basic_scan_context> arg(size_t id) const noexcept { return args_.get(id); }
@@ -338,18 +338,22 @@ namespace p1729r3 {
     scan_from_result_type<Rng> scan_from(const locale& loc, Rng&& range, wstring_view fmt, Args& ... args);
 
 
-    template<class Rng, class... Args>
-    constexpr basic_scan_args<scan_context<Rng>> make_scan_args(Args& ... args) {
-        basic_scan_arg_store<scan_context<Rng>, Args ...> ags{ args... };
-        return basic_scan_args<scan_context<Rng>>{ags};
+    template <class Rng, class ... Args>
+    constexpr basic_scan_arg_store<scan_context<Rng>, Args ...> make_scan_arg_store(Args& ... args) {
+        return basic_scan_arg_store<scan_context<Rng>, Args ...> { args... };
     }
-
     template<class Rng, class... Args>
-    constexpr basic_scan_args<wscan_context<Rng>> make_wscan_args(Args& ... args) {
-        basic_scan_arg_store<wscan_context<Rng>, Args ...> ags{ args... };
-        return basic_scan_args<wscan_context<Rng>>{ags};
+    constexpr basic_scan_args<scan_context<Rng>> make_scan_args(basic_scan_arg_store<scan_context<Rng>,Args...> ast) {
+        return basic_scan_args<scan_context<Rng>>{ast};
     }
-
+    template <class Rng, class ... Args>
+    constexpr basic_scan_arg_store<wscan_context<Rng>, Args ...> make_wscan_arg_store(Args& ... args) {
+        return basic_scan_arg_store<wscan_context<Rng>, Args ...> { args... };
+    }
+    template<class Rng, class... Args>
+    constexpr basic_scan_args<wscan_context<Rng>> make_wscan_args(basic_scan_arg_store<wscan_context<Rng>, Args...> ast) {
+        return basic_scan_args<wscan_context<Rng>>{ast};
+    }
     template<class Rng, class Context, class... Args>
     expected<scan_result<Rng, Args...>, scan_error> make_scan_result(expected<Rng, scan_error>&& source, basic_scan_arg_store<Context, Args...>&& args);
 } //! namespace p1729r3
