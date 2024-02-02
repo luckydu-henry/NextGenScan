@@ -11,9 +11,8 @@
 #define STD_END   }
 #define STD       ::std::
 #define RANGES    ::std::ranges::
-#include <array>
-
 #if CXX_VERSION >= 202004L // Has cxx 20 support
+#include <array>
 #include <expected>
 #include <format>
 #include <ranges>
@@ -59,8 +58,8 @@ namespace p1729r3 {
     template <class Rng, class...Args>   using scan_result_type       = expected<scan_result<RANGES borrowed_subrange_t<Rng>, Args...>, scan_error>;
     template <class Rng>                 using vscan_result_type      = expected<RANGES borrowed_subrange_t<Rng>, scan_error>;
     template <class Rng>                 using scan_from_result_type  = expected<RANGES borrowed_subrange_t<Rng>, scan_error>;
-    template <class Rng>                 using scan_args              = basic_scan_args<basic_scan_context<char, RANGES range_value_t<Rng>>>;
-    template <class Rng>                 using wscan_args             = basic_scan_args<basic_scan_context<wchar_t, RANGES range_value_t<Rng>>>;
+    template <class Rng>                 using scan_args              = basic_scan_args<basic_scan_context<Rng, char>>;
+    template <class Rng>                 using wscan_args             = basic_scan_args<basic_scan_context<Rng, wchar_t>>;
 
     // Implementations starts from here!
     template <typename Ty>
@@ -71,6 +70,7 @@ namespace p1729r3 {
         static constexpr pointer value = nullptr;
     };
 
+
     class scan_error {
     public:
         enum code_type {
@@ -78,7 +78,8 @@ namespace p1729r3 {
             end_of_range,
             invalid_format_string,
             invalid_scanned_value,
-            value_out_of_range
+            value_out_of_range,
+            pattern_unmatched
         };
         constexpr             scan_error() = default;
         constexpr             scan_error(code_type error_code, const char* message) : code_(error_code), message_(message) {}
@@ -161,13 +162,13 @@ namespace p1729r3 {
             unsigned long*               _Unsigned_long;
             unsigned long long*          _Unsigned_i64;
             bool*                        _Bool;
-            char_type*                   _C_string;
+            char_type**                  _C_string;
             void**                       _Void_ptr;
             float*                       _Float32;
             double*                      _Float64;
             long double*                 _Float_ext;
             STD basic_string<char_type>* _Std_string;
-            handle*                      _Custom;
+            handle                       _Custom;
         };
 
         _Arg_variant     value_;
@@ -178,19 +179,24 @@ namespace p1729r3 {
             void *ptr_;
             void(*scan_)(basic_scan_parse_context<char_type>& parse_ctx, Context scan_ctx, void*);
         public:
-            template <typename Ty>
-            explicit handle(Ty& v) :
-            ptr_ (STD addressof(v)),
-            scan_([](basic_scan_parse_context<char_type>& parse_ctx, Context scan_ctx, void* ptr) {
-                using value_type = STD remove_cvref_t<Ty>;
-                typename Context::template scanner_type<value_type> scanner;
-                parse_ctx.advance_to(scanner.parse(parse_ctx));
-                scan_ctx.advance_to(scanner.scan(ptr, scan_ctx));
-            }) {}
+            // When passing in a normal type these would be set to nullptr by default.
+            constexpr explicit handle() = default;
+
+#define _SCAN_HANDLE_LAMBDA() \
+        [](basic_scan_parse_context<char_type>& parse_ctx, Context scan_ctx, void* ptr) { \
+        using value_type = STD remove_cvref_t<Ty>;                                        \
+        typename Context::template scanner_type<value_type> scanner;                      \
+        parse_ctx.advance_to(scanner.parse(parse_ctx));                                   \
+        scan_ctx.advance_to(scanner.scan(ptr, scan_ctx));                                 \
+        }                                                                                 
+            template <typename Ty> explicit handle(Ty& v)               : ptr_(STD addressof(v)),scan_(_SCAN_HANDLE_LAMBDA()) {}
+            template <typename Ty> explicit handle(scan_ignored<Ty>&)   : ptr_(nullptr)         ,scan_(_SCAN_HANDLE_LAMBDA()) {}
 
             void scan(basic_scan_parse_context<char_type>& parse_ctx, Context& scan_ctx) const {
                 scan_(parse_ctx, scan_ctx, ptr_);
             }
+
+            ~handle() = default;
         };
         // Member functions.
         constexpr explicit basic_scan_arg() noexcept                               : type_(_Scan_arg_type::_None)          {value_._None = STD monostate{};}
@@ -208,13 +214,30 @@ namespace p1729r3 {
         constexpr explicit basic_scan_arg(double* v) noexcept                      : type_(_Scan_arg_type::_Float64)       {value_._Float64 = v;}
         constexpr explicit basic_scan_arg(long double* v) noexcept                 : type_(_Scan_arg_type::_Float_ext)     {value_._Float_ext = v;}
         constexpr explicit basic_scan_arg(bool* v) noexcept                        : type_(_Scan_arg_type::_Bool)          {value_._Bool = v;}
-        constexpr explicit basic_scan_arg(char_type** v) noexcept                  : type_(_Scan_arg_type::_C_string)      {value_._C_string = *v;}
+        constexpr explicit basic_scan_arg(char_type** v) noexcept                  : type_(_Scan_arg_type::_C_string)      {value_._C_string = v;}
         constexpr explicit basic_scan_arg(void** v) noexcept                       : type_(_Scan_arg_type::_Void_ptr)      {value_._Void_ptr = v;}
         constexpr explicit basic_scan_arg(STD basic_string<char_type>* v) noexcept : type_(_Scan_arg_type::_Std_string)    {value_._Std_string = v;}
-        constexpr explicit basic_scan_arg(handle* v) noexcept                      : type_(_Scan_arg_type::_Custom)        {value_._Custom = v;}            
 
-        template <typename Ty>
-        constexpr basic_scan_arg(scan_ignored<Ty>*) noexcept : basic_scan_arg(scan_ignored<Ty>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored            <signed char>*)  : basic_scan_arg(scan_ignored<signed char>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                  <short>*)  : basic_scan_arg(scan_ignored<short>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                   <long>*)  : basic_scan_arg(scan_ignored<long>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                    <int>*)  : basic_scan_arg(scan_ignored<int>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored              <long long>*)  : basic_scan_arg(scan_ignored<long long>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored          <unsigned char>*)  : basic_scan_arg(scan_ignored<unsigned char>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored         <unsigned short>*)  : basic_scan_arg(scan_ignored<unsigned short>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored           <unsigned int>*)  : basic_scan_arg(scan_ignored<unsigned int>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored          <unsigned long>*)  : basic_scan_arg(scan_ignored<unsigned long>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored     <unsigned long long>*)  : basic_scan_arg(scan_ignored<unsigned long long>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                  <float>*)  : basic_scan_arg(scan_ignored<float>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                 <double>*)  : basic_scan_arg(scan_ignored<double>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored            <long double>*)  : basic_scan_arg(scan_ignored<long double>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                   <bool>*)  : basic_scan_arg(scan_ignored<bool>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored             <char_type*>*)  : basic_scan_arg(scan_ignored<char_type*>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored                  <void*>*)  : basic_scan_arg(scan_ignored<void*>::value) {}
+        constexpr explicit basic_scan_arg(scan_ignored<basic_string<char_type>>*)  : basic_scan_arg(scan_ignored<basic_string<char_type>>::value) {}
+
+        // Handle accepts both writable values and ignored values.
+        constexpr basic_scan_arg(handle v) noexcept : type_(_Scan_arg_type::_Custom) { value_._Custom = v; }
 
         explicit operator bool() const noexcept {
             return type_ != _Scan_arg_type::_None;
@@ -246,6 +269,51 @@ namespace p1729r3 {
         }
     };
 
+    template <typename Ty, class Context>
+    struct _Arg_ptr_cast { constexpr auto operator()(Ty& v) { return basic_scan_arg<Context>::handle(v); } };
+
+#define DECL_ARG_PTR_CAST(type) \
+    template <typename Context> struct _Arg_ptr_cast<type, Context>{constexpr auto operator()(type& v) { return &v; }}
+
+    DECL_ARG_PTR_CAST(signed char);
+    DECL_ARG_PTR_CAST(short);
+    DECL_ARG_PTR_CAST(int);
+    DECL_ARG_PTR_CAST(long);
+    DECL_ARG_PTR_CAST(long long);
+    DECL_ARG_PTR_CAST(unsigned char);
+    DECL_ARG_PTR_CAST(unsigned short);
+    DECL_ARG_PTR_CAST(unsigned int);
+    DECL_ARG_PTR_CAST(unsigned long);
+    DECL_ARG_PTR_CAST(unsigned long long);
+    DECL_ARG_PTR_CAST(bool);
+    DECL_ARG_PTR_CAST(typename Context::char_type*);
+    DECL_ARG_PTR_CAST(void*);
+    DECL_ARG_PTR_CAST(float);
+    DECL_ARG_PTR_CAST(double);
+    DECL_ARG_PTR_CAST(long double);
+    DECL_ARG_PTR_CAST(basic_string<typename Context::char_type>);
+    DECL_ARG_PTR_CAST(scan_ignored<signed char>);
+    DECL_ARG_PTR_CAST(scan_ignored<short>);
+    DECL_ARG_PTR_CAST(scan_ignored<int>);
+    DECL_ARG_PTR_CAST(scan_ignored<long>);
+    DECL_ARG_PTR_CAST(scan_ignored<long long>);
+    DECL_ARG_PTR_CAST(scan_ignored<unsigned char>);
+    DECL_ARG_PTR_CAST(scan_ignored<unsigned short>);
+    DECL_ARG_PTR_CAST(scan_ignored<unsigned int>);
+    DECL_ARG_PTR_CAST(scan_ignored<unsigned long>);
+    DECL_ARG_PTR_CAST(scan_ignored<unsigned long long>);
+    DECL_ARG_PTR_CAST(scan_ignored<bool>);
+    DECL_ARG_PTR_CAST(scan_ignored<typename Context::char_type*>);
+    DECL_ARG_PTR_CAST(scan_ignored<void*>);
+    DECL_ARG_PTR_CAST(scan_ignored<float>);
+    DECL_ARG_PTR_CAST(scan_ignored<double>);
+    DECL_ARG_PTR_CAST(scan_ignored<long double>);
+    DECL_ARG_PTR_CAST(scan_ignored<basic_string<typename Context::char_type>>);
+
+#undef DECL_ARG_PTR_CAST
+
+
+
     template <class Context, typename ... Args>
     class basic_scan_arg_store {
     public:
@@ -253,7 +321,7 @@ namespace p1729r3 {
         STD array<basic_scan_arg<Context>, sizeof ... (Args)> data;
 
         basic_scan_arg_store(Args& ... _args) :
-        args(STD make_tuple(_args...)), data({ basic_scan_arg<Context>{&_args} ... }) {}
+        args(STD make_tuple(_args...)), data({ basic_scan_arg<Context>{_Arg_ptr_cast<std::remove_cvref_t<decltype(_args)>, Context>{}(_args)} ...}) {}
     };
 
     template <class Context>
@@ -301,18 +369,6 @@ namespace p1729r3 {
         basic_scan_args<basic_scan_context> args_;
     };
 
-    template<class... Args, scannable_range<char> Rng>
-    scan_result_type<Rng, Args...> scan(Rng&& range, STD string_view fmt);
-
-    template<class... Args, scannable_range<wchar_t> Rng>
-    scan_result_type<Rng, Args...> scan(Rng&& range, STD wstring_view fmt);
-
-    template<class... Args, scannable_range<char> Rng>
-    scan_result_type<Rng, Args...> scan(const locale& loc, Rng&& range, STD string_view fmt);
-
-    template <class... Args, scannable_range<wchar_t> Rng>
-    scan_result_type<Rng, Args...> scan(const locale& loc, Rng&& range, STD wstring_view fmt);
-
     template<scannable_range<char> Rng>
     vscan_result_type<Rng> vscan(Rng&& range, string_view fmt, scan_args<Rng> args);
 
@@ -324,6 +380,18 @@ namespace p1729r3 {
 
     template<scannable_range<wchar_t> Rng>
     vscan_result_type<Rng> vscan(const locale& loc, Rng&& range, wstring_view fmt, wscan_args<Rng> args);
+
+    template<class... Args, scannable_range<char> Rng>
+    scan_result_type<Rng, Args...> scan(Rng&& range, STD string_view fmt);
+
+    template<class... Args, scannable_range<wchar_t> Rng>
+    scan_result_type<Rng, Args...> scan(Rng&& range, STD wstring_view fmt);
+
+    template<class... Args, scannable_range<char> Rng>
+    scan_result_type<Rng, Args...> scan(const locale& loc, Rng&& range, STD string_view fmt);
+
+    template <class... Args, scannable_range<wchar_t> Rng>
+    scan_result_type<Rng, Args...> scan(const locale& loc, Rng&& range, STD wstring_view fmt);
 
     template<class ... Args, scannable_range<char> Rng>
     scan_from_result_type<Rng> scan_from(Rng&& range, string_view fmt, Args& ... args);
