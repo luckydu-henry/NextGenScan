@@ -98,15 +98,16 @@ struct _Arg_visitor {
         return rng.begin();
     }
     result_type operator()(typename std::p1729r3::basic_scan_arg<std::p1729r3::basic_scan_context<Rng, char>>::handle& hd) {
-        hd.scan(pctx, sctx);
-        return sctx.current();
+        auto result = hd.scan(pctx, sctx);
+        if (result) { return  sctx.current(); }
+        return std::unexpected(result);
     }
 };
 
 template <std::p1729r3::scannable_range<char> Rng>
 std::p1729r3::vscan_result_type<Rng> format_from(Rng rg, std::string_view fmt, std::p1729r3::scan_args<Rng> args) {
-    std::p1729r3::scan_context<Rng> ctx{ rg, args };
-    std::p1729r3::scan_parse_context ptx{ fmt};
+    std::p1729r3::scan_context<Rng>   ctx{ rg, args };
+    std::p1729r3::scan_parse_context  ptx{ fmt};
 
     auto pc = ptx.begin();
     auto sc = ctx.current();
@@ -173,12 +174,10 @@ int main(int argc, char* argv[]) {
     auto k = scn::make_scan_args(k0);
     auto t = format_from(rng, "Abc {0:d}{1}{2}", k);
 
-
     if (t.has_value()) {
-        std::cout << q << std::endl;
-    }
-    else {
-        std::cout << t.error().msg() << std::endl;
+        std::cout << m << std::endl;
+    } else {
+        std::cout << t.error().msg << std::endl;
     }
 
 

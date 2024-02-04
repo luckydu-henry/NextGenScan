@@ -28,7 +28,7 @@ namespace p1729r3 {
         _Bool,        _Void_ptr,     _C_string,
         _Std_string,  _Custom
     };
-                                                                class scan_error;
+    struct scan_error;
     // It's just a wrap which contains noting but a type alias.
     template <typename Ty>                                      class scan_skip;
     template <RANGES forward_range Rng, typename ... Args>      class scan_result;
@@ -61,7 +61,23 @@ namespace p1729r3 {
     template <class Rng>                 using scan_args              = basic_scan_args<basic_scan_context<Rng, char>>;
     template <class Rng>                 using wscan_args             = basic_scan_args<basic_scan_context<Rng, wchar_t>>;
 
-    // Implementations starts from here!
+    template <typename CharT>            using basic_parser_result_type  = std::expected<typename basic_scan_parse_context<CharT>::iterator, scan_error>;
+    template <class Context>             using basic_scanner_result_type = std::expected<typename Context::iterator, scan_error>;
+
+
+    // Basic structure of a scanner specification.
+    template <typename Ty, typename CharT>
+    class scanner {
+        scanner()               = default;
+        scanner(const scanner&) = delete;
+
+        basic_parser_result_type<CharT>    parse(basic_scan_parse_context<CharT>& parse_ctx);
+        template <typename Context> requires std::is_same_v<typename Context::char_type, CharT>
+        basic_scanner_result_type<Context> scan(Ty* ptr, basic_scan_context<typename Context::range_type, CharT>& ctx);
+
+        ~scanner() = default;
+    };
+
     template <typename Ty>
     class scan_skip {
     public:
@@ -70,9 +86,7 @@ namespace p1729r3 {
         static constexpr pointer value = nullptr;
     };
 
-
-    class scan_error {
-    public:
+    struct scan_error {
         enum code_type {
             good,
             end_of_range,
@@ -80,15 +94,11 @@ namespace p1729r3 {
             invalid_scanned_value,
             value_out_of_range,
         };
-        constexpr             scan_error() = default;
-        constexpr             scan_error(code_type error_code, const char* message) : code_(error_code), message_(message) {}
-        constexpr explicit    operator bool() const noexcept { return code_ == code_type::good; }
-        constexpr code_type   code() const noexcept { return code_; }
-        constexpr const char* msg() const { return message_; }
 
-    private:
-        code_type    code_;   
-        const char  *message_;
+        code_type        code;
+        STD string_view  msg;
+
+        constexpr operator bool() const { return good == code; }
     };
 
     template <RANGES forward_range Rng, typename ... Args>
@@ -172,24 +182,27 @@ namespace p1729r3 {
     public:
         // Implementation of handle which handles custom types scanning.
         class handle {
-            void *ptr_;
-            void(*scan_)(basic_scan_parse_context<char_type>& parse_ctx, Context scan_ctx, void*);
+            void       *ptr_;
+            scan_error(*scan_)(basic_scan_parse_context<char_type>& parse_ctx, Context scan_ctx, void*);
+
+            template <typename Ty>
+            scan_error scan_proto_(basic_scan_parse_context<char_type>& parse_ctx, Context& scan_ctx, void* ptr) {
+                using value_type = STD remove_cvref_t<Ty>;
+                typename Context::template scanner_type<value_type> scanner;
+
+                if (auto pres = scanner.parse(parse_ctx); pres.has_value()) { parse_ctx.advance_to(pres.value()); } else { return pres.error(); }
+                if (auto sres = scanner.scan((Ty*)ptr, scan_ctx); sres.has_value()) { scan_ctx.advance_to(sres.value()); } else { return sres.error(); }
+                return scan_error{ scan_error::good, "" };
+            }
         public:
             // When passing in a normal type these would be set to nullptr by default.
             constexpr explicit handle() = default;
 
-#define _SCAN_HANDLE_LAMBDA() \
-        [](basic_scan_parse_context<char_type>& parse_ctx, Context& scan_ctx, void* ptr) { \
-        using value_type = STD remove_cvref_t<Ty>;                                         \
-        typename Context::template scanner_type<value_type> scanner;                       \
-        parse_ctx.advance_to(scanner.parse(parse_ctx));                                    \
-        scan_ctx.advance_to(scanner.scan((Ty*)ptr, scan_ctx));                             \
-        }                                                                                 
-            template <typename Ty> explicit handle(Ty& v)               : ptr_(STD addressof(v)),scan_(_SCAN_HANDLE_LAMBDA()) {}
-            template <typename Ty> explicit handle(scan_skip<Ty>&)   : ptr_(nullptr)         ,scan_(_SCAN_HANDLE_LAMBDA()) {}
+            template <typename Ty> explicit handle(Ty& v)            : ptr_(STD addressof(v)),scan_(scan_proto_<Ty>) {}
+            template <typename Ty> explicit handle(scan_skip<Ty>&)   : ptr_(nullptr)         ,scan_(scan_proto_<Ty>) {}
 
-            void scan(basic_scan_parse_context<char_type>& parse_ctx, Context& scan_ctx) const {
-                scan_(parse_ctx, scan_ctx, ptr_);
+            decltype(auto) scan(basic_scan_parse_context<char_type>& parse_ctx, Context& scan_ctx) const {
+                return scan_(parse_ctx, scan_ctx, ptr_);
             }
 
             ~handle() = default;
@@ -367,6 +380,10 @@ namespace p1729r3 {
         STD locale                          locale_;
         basic_scan_args<basic_scan_context> args_;
     };
+
+
+
+
 
     template<scannable_range<char> Rng>
     vscan_result_type<Rng> vscan(Rng&& range, string_view fmt, scan_args<Rng> args);
