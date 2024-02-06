@@ -20,7 +20,7 @@ STD_BEGIN
 namespace p1729r3 {
 
     // Some predefined concepts and types.
-    enum class _Scan_arg_type : uint8_t {
+    enum class _Scn_arg_type : uint8_t {
         _None, 
         _Signed_i8,   _Signed_i16,   _Signed_i32,   _Signed_i64,    _Signed_long,
         _Unsigned_i8, _Unsigned_i16, _Unsigned_i32, _Unsigned_i64,  _Unsigned_long,
@@ -68,10 +68,14 @@ namespace p1729r3 {
     // Basic structure of a scanner specification.
     template <typename Ty, typename CharT>
     class scanner {
+    public:
         scanner()               = default;
         scanner(const scanner&) = delete;
 
         basic_parser_result_type<CharT>    parse(basic_scan_parse_context<CharT>& parse_ctx);
+        // Uses ptr because ptr can easily check whether a value should be written or not --
+        // See if ptr == nullptr that means you have passed in a discard type and scanner won't write
+        // Value into that discard type (discard types also contains nothing).
         template <typename Context> requires std::is_same_v<typename Context::char_type, CharT>
         basic_scanner_result_type<Context> scan(Ty* ptr, basic_scan_context<typename Context::range_type, CharT>& ctx);
 
@@ -178,7 +182,7 @@ namespace p1729r3 {
         };
 
         _Arg_variant     value_;
-        _Scan_arg_type   type_;
+        _Scn_arg_type   type_;
     public:
         // Implementation of handle which handles custom types scanning.
         class handle {
@@ -208,24 +212,24 @@ namespace p1729r3 {
             ~handle() = default;
         };
         // Member functions.
-        constexpr explicit basic_scan_arg() noexcept                               : type_(_Scan_arg_type::_None)          {value_._None = STD monostate{};}
-        constexpr explicit basic_scan_arg(signed char* v) noexcept                 : type_(_Scan_arg_type::_Signed_i8)     {value_._Signed_i8 = v;}
-        constexpr explicit basic_scan_arg(signed short* v) noexcept                : type_(_Scan_arg_type::_Signed_i16)    {value_._Signed_i16 = v;}
-        constexpr explicit basic_scan_arg(signed int* v) noexcept                  : type_(_Scan_arg_type::_Signed_i32)    {value_._Signed_i32 = v;}
-        constexpr explicit basic_scan_arg(signed long* v) noexcept                 : type_(_Scan_arg_type::_Signed_long)   {value_._Signed_long = v;}
-        constexpr explicit basic_scan_arg(signed long long* v) noexcept            : type_(_Scan_arg_type::_Signed_i64)    {value_._Signed_i64 = v;}
-        constexpr explicit basic_scan_arg(unsigned char* v) noexcept               : type_(_Scan_arg_type::_Unsigned_i8)   {value_._Unsigned_i8 = v;}
-        constexpr explicit basic_scan_arg(unsigned short* v) noexcept              : type_(_Scan_arg_type::_Unsigned_i16)  {value_._Unsigned_i16 = v;}
-        constexpr explicit basic_scan_arg(unsigned int* v) noexcept                : type_(_Scan_arg_type::_Unsigned_i32)  {value_._Unsigned_i32 = v;}
-        constexpr explicit basic_scan_arg(unsigned long* v) noexcept               : type_(_Scan_arg_type::_Unsigned_long) {value_._Unsigned_long = v;}
-        constexpr explicit basic_scan_arg(unsigned long long* v) noexcept          : type_(_Scan_arg_type::_Unsigned_i64)  {value_._Unsigned_i64 = v;}
-        constexpr explicit basic_scan_arg(float* v) noexcept                       : type_(_Scan_arg_type::_Float32)       {value_._Float32 = v;}
-        constexpr explicit basic_scan_arg(double* v) noexcept                      : type_(_Scan_arg_type::_Float64)       {value_._Float64 = v;}
-        constexpr explicit basic_scan_arg(long double* v) noexcept                 : type_(_Scan_arg_type::_Float_ext)     {value_._Float_ext = v;}
-        constexpr explicit basic_scan_arg(bool* v) noexcept                        : type_(_Scan_arg_type::_Bool)          {value_._Bool = v;}
-        constexpr explicit basic_scan_arg(char_type** v) noexcept                  : type_(_Scan_arg_type::_C_string)      {value_._C_string = v;}
-        constexpr explicit basic_scan_arg(void** v) noexcept                       : type_(_Scan_arg_type::_Void_ptr)      {value_._Void_ptr = v;}
-        constexpr explicit basic_scan_arg(STD basic_string<char_type>* v) noexcept : type_(_Scan_arg_type::_Std_string)    {value_._Std_string = v;}
+        constexpr explicit basic_scan_arg() noexcept                               : type_(_Scn_arg_type::_None)          {value_._None = STD monostate{};}
+        constexpr explicit basic_scan_arg(signed char* v) noexcept                 : type_(_Scn_arg_type::_Signed_i8)     {value_._Signed_i8 = v;}
+        constexpr explicit basic_scan_arg(signed short* v) noexcept                : type_(_Scn_arg_type::_Signed_i16)    {value_._Signed_i16 = v;}
+        constexpr explicit basic_scan_arg(signed int* v) noexcept                  : type_(_Scn_arg_type::_Signed_i32)    {value_._Signed_i32 = v;}
+        constexpr explicit basic_scan_arg(signed long* v) noexcept                 : type_(_Scn_arg_type::_Signed_long)   {value_._Signed_long = v;}
+        constexpr explicit basic_scan_arg(signed long long* v) noexcept            : type_(_Scn_arg_type::_Signed_i64)    {value_._Signed_i64 = v;}
+        constexpr explicit basic_scan_arg(unsigned char* v) noexcept               : type_(_Scn_arg_type::_Unsigned_i8)   {value_._Unsigned_i8 = v;}
+        constexpr explicit basic_scan_arg(unsigned short* v) noexcept              : type_(_Scn_arg_type::_Unsigned_i16)  {value_._Unsigned_i16 = v;}
+        constexpr explicit basic_scan_arg(unsigned int* v) noexcept                : type_(_Scn_arg_type::_Unsigned_i32)  {value_._Unsigned_i32 = v;}
+        constexpr explicit basic_scan_arg(unsigned long* v) noexcept               : type_(_Scn_arg_type::_Unsigned_long) {value_._Unsigned_long = v;}
+        constexpr explicit basic_scan_arg(unsigned long long* v) noexcept          : type_(_Scn_arg_type::_Unsigned_i64)  {value_._Unsigned_i64 = v;}
+        constexpr explicit basic_scan_arg(float* v) noexcept                       : type_(_Scn_arg_type::_Float32)       {value_._Float32 = v;}
+        constexpr explicit basic_scan_arg(double* v) noexcept                      : type_(_Scn_arg_type::_Float64)       {value_._Float64 = v;}
+        constexpr explicit basic_scan_arg(long double* v) noexcept                 : type_(_Scn_arg_type::_Float_ext)     {value_._Float_ext = v;}
+        constexpr explicit basic_scan_arg(bool* v) noexcept                        : type_(_Scn_arg_type::_Bool)          {value_._Bool = v;}
+        constexpr explicit basic_scan_arg(char_type** v) noexcept                  : type_(_Scn_arg_type::_C_string)      {value_._C_string = v;}
+        constexpr explicit basic_scan_arg(void** v) noexcept                       : type_(_Scn_arg_type::_Void_ptr)      {value_._Void_ptr = v;}
+        constexpr explicit basic_scan_arg(STD basic_string<char_type>* v) noexcept : type_(_Scn_arg_type::_Std_string)    {value_._Std_string = v;}
 
         constexpr explicit basic_scan_arg(scan_skip            <signed char>*)  : basic_scan_arg(scan_skip<signed char>::value) {}
         constexpr explicit basic_scan_arg(scan_skip                  <short>*)  : basic_scan_arg(scan_skip<short>::value) {}
@@ -246,34 +250,34 @@ namespace p1729r3 {
         constexpr explicit basic_scan_arg(scan_skip<basic_string<char_type>>*)  : basic_scan_arg(scan_skip<basic_string<char_type>>::value) {}
 
         // Handle accepts both writable values and ignored values.
-        constexpr basic_scan_arg(handle v) noexcept : type_(_Scan_arg_type::_Custom) { value_._Custom = v; }
+        constexpr basic_scan_arg(handle v) noexcept : type_(_Scn_arg_type::_Custom) { value_._Custom = v; }
 
         explicit operator bool() const noexcept {
-            return type_ != _Scan_arg_type::_None;
+            return type_ != _Scn_arg_type::_None;
         }
         // Visit member function can be used to replace visit_scan_arg.
         template <typename Visitor>
         decltype(auto) visit(Visitor&& vis) {
             switch (type_) {
-            case _Scan_arg_type::_None:           return STD forward<Visitor>(vis)(value_._None);       
-            case _Scan_arg_type::_Signed_i8:      return STD forward<Visitor>(vis)(value_._Signed_i8);  
-            case _Scan_arg_type::_Signed_i16:     return STD forward<Visitor>(vis)(value_._Signed_i16); 
-            case _Scan_arg_type::_Signed_i32:     return STD forward<Visitor>(vis)(value_._Signed_i32); 
-            case _Scan_arg_type::_Signed_i64:     return STD forward<Visitor>(vis)(value_._Signed_i64); 
-            case _Scan_arg_type::_Signed_long:    return STD forward<Visitor>(vis)(value_._Signed_long);
-            case _Scan_arg_type::_Unsigned_i8:    return STD forward<Visitor>(vis)(value_._Unsigned_i8);
-            case _Scan_arg_type::_Unsigned_i16:   return STD forward<Visitor>(vis)(value_._Unsigned_i16);  
-            case _Scan_arg_type::_Unsigned_i32:   return STD forward<Visitor>(vis)(value_._Unsigned_i32);  
-            case _Scan_arg_type::_Unsigned_i64:   return STD forward<Visitor>(vis)(value_._Unsigned_i64);  
-            case _Scan_arg_type::_Unsigned_long:  return STD forward<Visitor>(vis)(value_._Unsigned_long); 
-            case _Scan_arg_type::_Float32:        return STD forward<Visitor>(vis)(value_._Float32);       
-            case _Scan_arg_type::_Float64:        return STD forward<Visitor>(vis)(value_._Float64);       
-            case _Scan_arg_type::_Float_ext:      return STD forward<Visitor>(vis)(value_._Float_ext);     
-            case _Scan_arg_type::_Bool:           return STD forward<Visitor>(vis)(value_._Bool);          
-            case _Scan_arg_type::_Void_ptr:       return STD forward<Visitor>(vis)(value_._Void_ptr);      
-            case _Scan_arg_type::_C_string:       return STD forward<Visitor>(vis)(value_._C_string);      
-            case _Scan_arg_type::_Std_string:     return STD forward<Visitor>(vis)(value_._Std_string);    
-            case _Scan_arg_type::_Custom:         return STD forward<Visitor>(vis)(value_._Custom);        
+            case _Scn_arg_type::_None:           return STD forward<Visitor>(vis)(value_._None);       
+            case _Scn_arg_type::_Signed_i8:      return STD forward<Visitor>(vis)(value_._Signed_i8);  
+            case _Scn_arg_type::_Signed_i16:     return STD forward<Visitor>(vis)(value_._Signed_i16); 
+            case _Scn_arg_type::_Signed_i32:     return STD forward<Visitor>(vis)(value_._Signed_i32); 
+            case _Scn_arg_type::_Signed_i64:     return STD forward<Visitor>(vis)(value_._Signed_i64); 
+            case _Scn_arg_type::_Signed_long:    return STD forward<Visitor>(vis)(value_._Signed_long);
+            case _Scn_arg_type::_Unsigned_i8:    return STD forward<Visitor>(vis)(value_._Unsigned_i8);
+            case _Scn_arg_type::_Unsigned_i16:   return STD forward<Visitor>(vis)(value_._Unsigned_i16);  
+            case _Scn_arg_type::_Unsigned_i32:   return STD forward<Visitor>(vis)(value_._Unsigned_i32);  
+            case _Scn_arg_type::_Unsigned_i64:   return STD forward<Visitor>(vis)(value_._Unsigned_i64);  
+            case _Scn_arg_type::_Unsigned_long:  return STD forward<Visitor>(vis)(value_._Unsigned_long); 
+            case _Scn_arg_type::_Float32:        return STD forward<Visitor>(vis)(value_._Float32);       
+            case _Scn_arg_type::_Float64:        return STD forward<Visitor>(vis)(value_._Float64);       
+            case _Scn_arg_type::_Float_ext:      return STD forward<Visitor>(vis)(value_._Float_ext);     
+            case _Scn_arg_type::_Bool:           return STD forward<Visitor>(vis)(value_._Bool);          
+            case _Scn_arg_type::_Void_ptr:       return STD forward<Visitor>(vis)(value_._Void_ptr);      
+            case _Scn_arg_type::_C_string:       return STD forward<Visitor>(vis)(value_._C_string);      
+            case _Scn_arg_type::_Std_string:     return STD forward<Visitor>(vis)(value_._Std_string);    
+            case _Scn_arg_type::_Custom:         return STD forward<Visitor>(vis)(value_._Custom);        
             }
         }
     };
@@ -320,8 +324,6 @@ namespace p1729r3 {
     DECL_ARG_PTR_CAST(scan_skip<basic_string<typename Context::char_type>>);
 
 #undef DECL_ARG_PTR_CAST
-
-
 
     template <class Context, typename ... Args>
     class basic_scan_arg_store {
@@ -380,10 +382,6 @@ namespace p1729r3 {
         STD locale                          locale_;
         basic_scan_args<basic_scan_context> args_;
     };
-
-
-
-
 
     template<scannable_range<char> Rng>
     vscan_result_type<Rng> vscan(Rng&& range, string_view fmt, scan_args<Rng> args);
