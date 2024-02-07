@@ -54,15 +54,15 @@ namespace p1729r3 {
     };
     template<class Rng, class T, class CharT>
                                        concept scannable              = scannable_with<remove_reference_t<T>, basic_scan_context<Rng, CharT>>;
-    template <class Rng, class CharT>  concept scannable_range        = RANGES forward_range<Rng> && STD same_as<RANGES range_value_t<Rng>, CharT>;
+    template <class Rng, class CharT>  concept scannable_range = RANGES forward_range<Rng>;  // No hard requirement to the value type.
     template <class Rng, class...Args>   using scan_result_type       = expected<scan_result<RANGES borrowed_subrange_t<Rng>, Args...>, scan_error>;
     template <class Rng>                 using vscan_result_type      = expected<RANGES borrowed_subrange_t<Rng>, scan_error>;
     template <class Rng>                 using scan_from_result_type  = expected<RANGES borrowed_subrange_t<Rng>, scan_error>;
     template <class Rng>                 using scan_args              = basic_scan_args<basic_scan_context<Rng, char>>;
     template <class Rng>                 using wscan_args             = basic_scan_args<basic_scan_context<Rng, wchar_t>>;
 
-    template <typename CharT>            using basic_parser_result_type  = std::expected<typename basic_scan_parse_context<CharT>::iterator, scan_error>;
-    template <class Context>             using basic_scanner_result_type = std::expected<typename Context::iterator, scan_error>;
+    template <typename CharT>            using basic_parser_result_type  = STD expected<typename basic_scan_parse_context<CharT>::iterator, scan_error>;
+    template <class Context>             using basic_scanner_result_type = STD expected<typename Context::iterator, scan_error>;
 
 
     // Basic structure of a scanner specification.

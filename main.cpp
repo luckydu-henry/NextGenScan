@@ -32,8 +32,10 @@ std::expected<std::tuple<typename std::p1729r3::basic_scan_parse_context<CharT>:
     }
     if (*std::next(i) == '}') return _SCAN_UNEXPECT(invalid_format_string, "Scan description is empty!");
 ret_point:
-    j = (j != -1) ? j : ptx.next_arg_id(); ptx.check_arg_id(j);
+
+    if (j != -1) { ptx.check_arg_id(j); } else { j = ptx.next_arg_id(); }
     return std::make_tuple(i, j);
+
 }
 
 
@@ -56,9 +58,8 @@ struct _Basic_scn_specs {
 };
 
 template <typename CharT>
-std::expected<typename std::p1729r3::basic_scan_parse_context<CharT>::iterator,
-                       std::p1729r3::scan_error> _Parse_scan_specs(const std::p1729r3::basic_scan_parse_context<CharT>& pctx, 
-                                                                   _Basic_scn_specs<CharT>& specs) {
+std::p1729r3::basic_parser_result_type<CharT> _Parse_basic(const std::p1729r3::basic_scan_parse_context<CharT>& pctx, 
+                                                                    _Basic_scn_specs<CharT>& specs) {
     auto i = pctx.begin();
     for (;*i != '}'; ++i) {
         // Do format specifies.
@@ -66,6 +67,56 @@ std::expected<typename std::p1729r3::basic_scan_parse_context<CharT>::iterator,
     // Return the next element of }
     return std::next(i);
 }
+
+template <typename Ty, class Context>
+std::p1729r3::basic_scanner_result_type<Context> _Scan_basic(const Context& sctx, Ty* ptr, 
+                                                             const _Basic_scn_specs<typename Context::char_type>& specs) {
+
+    auto rng = sctx.range();
+    char buf[1200] = {};
+
+    using namespace std::string_view_literals;
+    using char_type = typename Context::char_type;
+    namespace ranges = std::ranges;
+
+    std::string_view digit_set = "0123456789"sv,
+                     hexlt_set = "abcdef"sv,
+                     hexbg_set = "ABCDEF"sv,
+                     flt_dot   = "."sv,
+                     hexpos_lt = "p"sv,
+                     hexpos_bg = "P"sv,
+                     exp_lt    = "e"sv,
+                     exp_bg    = "E"sv;
+
+    if constexpr (std::is_same_v<Ty, bool>) {
+        return std::unexpected(std::p1729r3::scan_error(std::p1729r3::scan_error::invalid_scanned_value, "does not support now!"));
+    }
+    if constexpr (std::integral<Ty> && !std::is_same_v<Ty, bool>) {
+        // Boolean value only contains true or false.
+        Ty         v = 0;
+        char*      q = buf;
+        // Can't be replaced by copy_if
+        for (auto i = rng.begin(); i != rng.end() && ranges::contains(digit_set, static_cast<char>(*i)); ++i) { *q++ = (*i) & 0xFF; }
+        auto res = std::from_chars(buf, q, v);
+        // Check whether we should write in this value.
+        if (ptr) { *ptr = v; }
+        return std::next(rng.begin(), res.ptr - buf);
+    }
+    if constexpr (std::floating_point<Ty>) {
+        return std::unexpected(std::p1729r3::scan_error(std::p1729r3::scan_error::invalid_scanned_value, "does not support now!"));
+    }
+    if constexpr (std::is_same_v<Ty, void*>) {
+        return std::unexpected(std::p1729r3::scan_error(std::p1729r3::scan_error::invalid_scanned_value, "does not support now!"));
+    }
+    // Input char should be allocated first!
+    if constexpr (std::is_same_v<Ty, char_type*>) {
+        return std::unexpected(std::p1729r3::scan_error(std::p1729r3::scan_error::invalid_scanned_value, "does not support now!"));
+    }
+    if constexpr (std::is_same_v<Ty, std::basic_string<char_type>>) {
+        return std::unexpected(std::p1729r3::scan_error(std::p1729r3::scan_error::invalid_scanned_value, "does not support now!"));
+    }
+}
+
 
 
 template <class Rng>
@@ -80,26 +131,11 @@ struct _Arg_visitor {
     result_type operator()(std::monostate k) const { return sctx.current(); }
     template <typename Ty>
     result_type operator()(Ty* p) {
-
         _Basic_scn_specs<char> specs;
-        auto pres = _Parse_scan_specs(pctx, specs);
-
+        auto pres = _Parse_basic(pctx, specs);
         if (pres.has_value()) { pctx.advance_to(pres.value()); }
-        else                  { return std::unexpected(pres.error()); }
-
-        auto rng = sctx.range();
-
-        char buf[1200] = {};
-        if constexpr (std::is_same_v<Ty, int>) {
-            int v = 0;
-            char* q = buf;
-            // Can't be replaced by copy_if
-            for (auto i = rng.begin(); i != rng.end() && *i >= '0' && *i <= '9'; ++i) { *q++ = *i; }
-            auto res = std::from_chars(buf, q, v);
-            if (p) { *p = v; }
-            return std::next(rng.begin(), res.ptr - buf);
-        }
-        return rng.begin();
+        else { return std::unexpected(pres.error()); }
+        return _Scan_basic(sctx, p, specs);
     }
     result_type operator()(typename std::p1729r3::basic_scan_arg<std::p1729r3::basic_scan_context<Rng, char>>::handle& hd) {
         auto result = hd.scan(pctx, sctx);
@@ -137,8 +173,9 @@ std::p1729r3::vscan_result_type<Rng> format_from(Rng rg, std::string_view fmt, s
 
                         auto k = ctx.arg(std::get<1>(v.value())).visit(_Arg_visitor<Rng>{ctx, ptx});
                         if (k.has_value()) { ctx.advance_to(k.value()); }
-                        else               { return std::unexpected(v.error()); }
-                    } else  return std::unexpected(v.error());
+                        else { return std::unexpected(k.error()); }
+                    }
+                    else  return std::unexpected(v.error());
                 }
             }
             else if (*pc == '}') {
@@ -175,7 +212,7 @@ public:
         ptr_.seekg(0, std::ios::end); end_ = iterator(*this);
         ptr_.seekg(0, std::ios::beg);
     }
-    // No default construct and copy assignment.
+    // No default constructor.
     constexpr basic_scannable_istream() = delete;
     constexpr basic_scannable_istream(const basic_scannable_istream&) = default;
     constexpr basic_scannable_istream& operator=(const basic_scannable_istream&) = default;
@@ -183,79 +220,69 @@ public:
 
     class iterator {
         friend class basic_scannable_istream;
-
-        mutable basic_scannable_istream* view_;
-        mutable char_type                val_ = '\0';
-        std::size_t                      position_;
-
+        static constexpr unsigned int chars_infinity_ = std::numeric_limits<unsigned int>::infinity();
     public:
 #ifdef __cpp_lib_concepts
         using iterator_concept  = std::forward_iterator_tag;
 #endif // __cpp_lib_concepts
         using iterator_category = std::forward_iterator_tag;
-        using value_type        = char_type;
+        using value_type        = unsigned int; // For unicode and binary mode read.
         using difference_type   = std::ptrdiff_t;
         using pointer           = value_type*;
         using reference         = value_type&;
 
-        iterator() : view_(nullptr), position_(0) {}
-        iterator(basic_scannable_istream& view)       : view_(std::addressof(view)), position_(view.ptr_.tellg()) {}
+        iterator() = default;
+        iterator(basic_scannable_istream& view) : view_(std::addressof(view)), position_(view.ptr_.tellg()) {}
 
-        iterator(const iterator& other)      = default;
+        iterator(const iterator&)            = default;
         iterator(iterator&&)                 = default;
         iterator& operator=(iterator&&)      = default;
         iterator& operator=(const iterator&) = default;
 
-        char_type&  operator*() const {
-            view_->ptr_.seekg(position_, std::ios::beg).get(val_);
-            view_->ptr_.seekg(-1, std::ios::cur);
+        value_type& operator*() const {
+            if (val_ == chars_infinity_) {
+                view_->ptr_.seekg(position_, std::ios::beg).get(reinterpret_cast<char_type&>(val_));
+                view_->ptr_.seekg(-1, std::ios::cur);
+            }
             return val_;
         }
-        iterator&  operator++() {
-            ++position_;
-            return *this;
-        }
-        iterator  operator++(int) {
-            position_++;
-            return *this;
-        }
+        iterator&      operator++()    { val_ = chars_infinity_; ++position_; return *this; }
+        iterator       operator++(int) { val_ = chars_infinity_; position_++; return *this; }
         constexpr bool operator==(const iterator& other) const {
             return position_ == other.position_;
         }
+    private:
+        mutable basic_scannable_istream* view_      = nullptr;
+        mutable value_type               val_       = chars_infinity_;
+        std::size_t                      position_  = 0;
     };
     // Range constructor.
     constexpr basic_scannable_istream(iterator beg, iterator end) : ptr_(beg.view_->ptr_), beg_(beg), end_(end) {}
 
-    constexpr iterator begin() { return beg_; }
-    constexpr iterator end()   { return end_; }
+    constexpr iterator begin() const { return beg_; }
+    constexpr iterator end()   const { return end_; }
 
 private:
     std::basic_istream<char_type>& ptr_;
     iterator                       beg_, end_;
 };
 
-template <class _Ty>
-concept _Incrementable = requires(_Ty __t) {
-    { __t++ } -> std::same_as<_Ty>;
-};
-
-
 int main(int argc, char* argv[]) {
     using namespace std::string_literals;
     using namespace std::string_view_literals;
     namespace scn = std::p1729r3;
 
-    int p = 0, q, m;
+    int p = 0, q, m; unsigned long long o;
 
-    std::stringstream      strm{ "12345 6789 9981" };
+    std::stringstream      strm{ "12345 6789 9981 1928374655" };
     basic_scannable_istream rng{ strm };
 
-    auto k0 = scn::make_scan_arg_store<decltype(rng)>(p, q, m);
+    auto k0 = scn::make_scan_arg_store<decltype(rng)>(p, q, m, o);
     auto k = scn::make_scan_args(k0);
-    auto t = format_from(rng, "{0}{1}{2}", k);
+    auto t = format_from(rng, "{}{}{}{}", k);
 
     if (t.has_value()) {
-        std::cout << m << std::endl;
+        std::cout << o << std::endl;
     }
     else {
         std::cout << t.error().msg << std::endl;
